@@ -104,6 +104,10 @@
     background:transparent; color:var(--accent); border:1px solid var(--accent);
   }
   .btn.small{ width:auto; padding:8px 14px; margin-top:0; font-size:13px; }
+  .btn.danger{ background:var(--danger); }
+  .btn.danger.secondary{ background:transparent; color:var(--danger); border:1px solid var(--danger); }
+  .danger-zone{ margin-top:28px; padding-top:16px; border-top:1px dashed var(--line); }
+  .danger-zone .hint{ font-size:12px; color:var(--ink-soft); margin-top:6px; line-height:1.5; }
 
   .segmented{
     display:flex; background:var(--paper-2); border-radius:10px; padding:3px; gap:3px;
@@ -262,6 +266,19 @@
         <input id="new-cat-budget" type="number" placeholder="Бюджет" style="max-width:110px">
         <button class="btn small" id="btn-add-cat">+</button>
       </div>
+
+      <div class="danger-zone">
+        <label style="margin-top:0">Очистить данные</label>
+        <div class="segmented" id="clear-scope">
+          <button data-scope="mine" class="active">Мои траты</button>
+          <button data-scope="all">Все траты</button>
+        </div>
+        <div class="row-between">
+          <select id="clear-month"></select>
+        </div>
+        <button class="btn danger" id="btn-clear">Удалить</button>
+        <div class="hint">Удаляет записи о тратах безвозвратно. Категории и бюджеты не затрагиваются.</div>
+      </div>
     </section>
 
   </main>
@@ -279,7 +296,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, doc, setDoc, onSnapshot, serverTimestamp
+  getFirestore, collection, addDoc, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
@@ -287,7 +304,7 @@ import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/1
    1) ВСТАВЬТЕ СЮДА СВОЙ FIREBASE CONFIG (из консоли Firebase)
    ========================================================= */
 const firebaseConfig = {
- apiKey: "AIzaSyDjBUco7Ix9fki-15MlB6JH-LNUdG_Y-r0",
+  apiKey: "AIzaSyDjBUco7Ix9fki-15MlB6JH-LNUdG_Y-r0",
   authDomain: "budget-bbe78.firebaseapp.com",
   projectId: "budget-bbe78",
   storageBucket: "budget-bbe78.firebasestorage.app",
@@ -436,6 +453,11 @@ function populateMonthSelectors(){
     sel.innerHTML = keys.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
     sel.value = keys.includes(prev) ? prev : currentMonthKey();
   });
+  const clearSel = document.getElementById('clear-month');
+  const prevClear = clearSel.value;
+  clearSel.innerHTML = '<option value="all-time">За всё время</option>' +
+    keys.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
+  clearSel.value = (prevClear === 'all-time' || keys.includes(prevClear)) ? prevClear : 'all-time';
 }
 
 /* ---------- Scope toggles ---------- */
@@ -568,6 +590,44 @@ function renderBudgets(){
     });
   });
 }
+
+/* ---------- Clear data ---------- */
+let currentClearScope = 'mine';
+document.getElementById('clear-scope').addEventListener('click', e => {
+  const b = e.target.closest('button[data-scope]'); if (!b) return;
+  document.querySelectorAll('#clear-scope button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); currentClearScope = b.dataset.scope;
+});
+
+function confirmAction(message){
+  return new Promise(resolve => {
+    if (tg?.showConfirm) tg.showConfirm(message, ok => resolve(ok));
+    else resolve(window.confirm(message));
+  });
+}
+
+document.getElementById('btn-clear').addEventListener('click', async () => {
+  if (!db) { showToast('Firebase не настроен'); return; }
+  const month = document.getElementById('clear-month').value;
+  const toDelete = expenses.filter(e =>
+    (currentClearScope === 'all' || e.userId === userId) &&
+    (month === 'all-time' || monthKey(e.date) === month)
+  );
+  if (!toDelete.length) { showToast('Нечего удалять'); return; }
+
+  const who = currentClearScope === 'all' ? 'ВСЕ траты всех участников' : 'только ваши траты';
+  const when = month === 'all-time' ? 'за всё время' : `за ${monthLabel(month)}`;
+  const ok = await confirmAction(`Удалить ${who} ${when}? Записей: ${toDelete.length}. Отменить это будет нельзя.`);
+  if (!ok) return;
+
+  try {
+    for (const e of toDelete) await deleteDoc(doc(db, "expenses", e.id));
+    showToast(`Удалено записей: ${toDelete.length}`);
+  } catch (err) {
+    console.error(err);
+    showToast('Ошибка удаления');
+  }
+});
 
 document.getElementById('btn-add-cat').addEventListener('click', async () => {
   const name = document.getElementById('new-cat-name').value.trim();
