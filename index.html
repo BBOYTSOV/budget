@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Общая касса</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root{
     --text:#f3f5fb;
@@ -198,6 +197,8 @@
   .row-between{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:14px; }
 
   .chart-wrap{ position:relative; width:100%; max-width:260px; height:260px; margin:22px auto 6px; }
+  #pie-svg{ width:100%; height:100%; display:block; }
+  #pie-svg circle{ transition: stroke-dasharray .3s ease, stroke-dashoffset .3s ease; }
 
   .legend-list{ margin-top:16px; }
   .legend-item{
@@ -385,7 +386,7 @@
         <select id="chart-month"></select>
         <select id="chart-year" style="display:none"></select>
       </div>
-      <div class="chart-wrap"><canvas id="pie-canvas"></canvas></div>
+      <div class="chart-wrap"><svg id="pie-svg" viewBox="0 0 200 200"></svg></div>
       <div class="legend-list" id="chart-legend"></div>
       <div class="total-line"><span id="chart-total-label">Всего за месяц</span><span class="val mono" id="chart-total">0 ₽</span></div>
     </section>
@@ -587,11 +588,15 @@ const DEFAULT_CATEGORIES = [
 /* ---------- State ---------- */
 let categories = [];
 let expenses = [];
-let chartInstance = null;
 let currentChartScope = 'mine';
 let currentChartPeriod = 'month';
 let currentTableScope = 'mine';
 let editingId = null;
+
+function safeRun(fn, label){
+  try { fn(); }
+  catch (err) { console.error('[safeRun failed]', label || fn.name, err); }
+}
 
 /* ---------- Firestore refs & listeners ---------- */
 if (db) {
@@ -603,17 +608,18 @@ if (db) {
       categories = DEFAULT_CATEGORIES;
       setDoc(catDocRef, { list: DEFAULT_CATEGORIES }).catch(()=>{});
     }
-    fillCategoryOptions(document.getElementById('f-category'));
-    renderBudgets();
-    renderChart();
+    safeRun(() => fillCategoryOptions(document.getElementById('f-category')), 'fillCategoryOptions');
+    safeRun(renderBudgets, 'renderBudgets');
+    safeRun(renderChart, 'renderChart');
   });
 
   onSnapshot(collection(db, "expenses"), snap => {
     expenses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    populateSelectors();
-    renderChart();
-    renderTable();
-    renderBudgets();
+    // Order matters: budgets/table must update even if the chart ever fails to draw.
+    safeRun(populateSelectors, 'populateSelectors');
+    safeRun(renderBudgets, 'renderBudgets');
+    safeRun(renderTable, 'renderTable');
+    safeRun(renderChart, 'renderChart');
   });
 } else {
   categories = DEFAULT_CATEGORIES;
@@ -763,12 +769,14 @@ function renderChart(){
   document.getElementById('chart-total').textContent = fmt(total);
 
   const legend = document.getElementById('chart-legend');
-  if (!labels.length) {
+  const sortedCats = labels
+    .map((l,i)=>({l, v: values[i], c: colors[i]}))
+    .sort((a,b) => b.v - a.v);
+
+  if (!sortedCats.length) {
     legend.innerHTML = '<div class="empty">Трат за этот период пока нет</div>';
   } else {
-    legend.innerHTML = labels
-      .map((l,i)=>({l,v:values[i],c:colors[i]}))
-      .sort((a,b)=>b.v-a.v)
+    legend.innerHTML = sortedCats
       .map(x => `<div class="legend-item">
           <span class="dot" style="background:${x.c};color:${x.c}"></span>
           <span class="name">${x.l}</span>
@@ -777,19 +785,31 @@ function renderChart(){
         </div>`).join('');
   }
 
-  const ctx = document.getElementById('pie-canvas').getContext('2d');
-  if (chartInstance) chartInstance.destroy();
-  const chartBorder = getComputedStyle(document.documentElement).getPropertyValue('--chart-border').trim() || 'rgba(10,14,26,0.6)';
-  chartInstance = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: chartBorder, borderWidth: 3, hoverOffset: 6 }] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      cutout: '58%'
-    }
-  });
+  drawDonut(sortedCats, total);
+}
+
+/* Plain-SVG donut chart — no external chart library, so it can never fail to load. */
+function drawDonut(sortedCats, total){
+  const svg = document.getElementById('pie-svg');
+  const R = 80, CENTER = 100, STROKE = 34;
+  const CIRC = 2 * Math.PI * R;
+  const trackColor = 'rgba(140,148,170,0.18)';
+
+  let parts = `<circle cx="${CENTER}" cy="${CENTER}" r="${R}" fill="none" stroke="${trackColor}" stroke-width="${STROKE}"></circle>`;
+
+  if (total > 0 && sortedCats.length) {
+    let acc = 0;
+    parts += `<g transform="rotate(-90 ${CENTER} ${CENTER})">`;
+    sortedCats.forEach(seg => {
+      const frac = seg.v / total;
+      const dash = Math.max(frac * CIRC - 1.5, 0); // small gap between slices
+      parts += `<circle cx="${CENTER}" cy="${CENTER}" r="${R}" fill="none" stroke="${seg.c}" stroke-width="${STROKE}"
+        stroke-dasharray="${dash} ${CIRC - dash}" stroke-dashoffset="${-acc}" stroke-linecap="round"></circle>`;
+      acc += frac * CIRC;
+    });
+    parts += `</g>`;
+  }
+  svg.innerHTML = parts;
 }
 
 /* ---------- Table ---------- */
