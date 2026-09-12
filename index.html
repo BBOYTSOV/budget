@@ -42,8 +42,21 @@
   header.top .brand{
     font-size:20px; font-weight:700; letter-spacing:.2px;
   }
+  header.top .who-row{
+    display:flex; align-items:center; gap:8px; margin-top:2px;
+  }
   header.top .who{
-    font-size:13px; color:#9aa39a; margin-top:2px;
+    font-size:13px; color:#9aa39a;
+  }
+  header.top .who-edit-btn{
+    background:none; border:none; padding:0;
+    color:#7c8a7d; font-size:11.5px; text-decoration:underline; cursor:pointer;
+  }
+  .name-edit-row{
+    display:none; gap:8px; margin-top:10px;
+  }
+  .name-edit-row input{
+    flex:1; padding:8px 10px; border-radius:8px; border:none; font-size:13px;
   }
 
   #setup-banner{
@@ -193,7 +206,14 @@
 
   <header class="top">
     <div class="brand">Общая касса</div>
-    <div class="who" id="who-line">—</div>
+    <div class="who-row">
+      <div class="who" id="who-line">—</div>
+      <button class="who-edit-btn" id="btn-edit-name">изменить</button>
+    </div>
+    <div class="name-edit-row" id="name-edit-row">
+      <input id="name-edit-input" type="text" placeholder="Ваше имя" maxlength="40">
+      <button class="btn small" id="btn-save-name">Сохранить</button>
+    </div>
   </header>
 
   <div id="setup-banner">
@@ -331,8 +351,45 @@ const tgUser = tg?.initDataUnsafe?.user;
 const userId = tgUser ? String(tgUser.id) : "local-" + (localStorage.getItem('local-uid') || (() => {
   const id = Math.random().toString(36).slice(2); localStorage.setItem('local-uid', id); return id;
 })());
-const userName = tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') : "Вы (браузер)";
-document.getElementById('who-line').textContent = userName;
+
+/* ---------- Persisted display name (survives closing the app / re-visits) ---------- */
+const NAME_KEY = 'kassa-username-v1';
+function loadStoredName(){ return (localStorage.getItem(NAME_KEY) || '').trim(); }
+function saveStoredName(n){ localStorage.setItem(NAME_KEY, n); }
+
+let userName = loadStoredName();
+const isFirstVisit = !userName;
+if (!userName) {
+  userName = tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') : '';
+  if (userName) saveStoredName(userName);
+}
+
+function renderWhoLine(){
+  document.getElementById('who-line').textContent = userName || 'Без имени';
+}
+renderWhoLine();
+
+const nameEditRow = document.getElementById('name-edit-row');
+const nameEditInput = document.getElementById('name-edit-input');
+document.getElementById('btn-edit-name').addEventListener('click', () => {
+  nameEditInput.value = userName;
+  nameEditRow.style.display = 'flex';
+  nameEditInput.focus();
+});
+document.getElementById('btn-save-name').addEventListener('click', () => {
+  const val = nameEditInput.value.trim();
+  if (!val) { showToast('Введите имя'); return; }
+  userName = val;
+  saveStoredName(val);
+  renderWhoLine();
+  nameEditRow.style.display = 'none';
+  showToast('Имя сохранено на этом устройстве');
+});
+// First time in a plain browser (no Telegram identity) — ask for a name right away
+if (isFirstVisit && !userName) {
+  nameEditRow.style.display = 'flex';
+  nameEditInput.placeholder = 'Введите ваше имя';
+}
 
 /* ---------- Palette for categories ---------- */
 const PALETTE = ['#2f6f4e','#a4791f','#b3402f','#3a6ea5','#8a5aa8','#4a8a8a','#a35b2f','#5a6b8a','#7a8a3a','#8a4a6b'];
