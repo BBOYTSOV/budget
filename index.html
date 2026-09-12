@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Общая касса</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#151a21;
+    --paper:#f7f3e8;
+    --paper-2:#efe9d8;
+    --ink:#20211d;
+    --ink-soft:#5b5648;
+    --line:#d8cfb4;
+    --accent:#2f6f4e;
+    --accent-soft:#c9e2d3;
+    --danger:#b3402f;
+    --danger-soft:#f0d3cd;
+    --gold:#a4791f;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);}
+  body{
+    display:flex; justify-content:center;
+    min-height:100vh;
+  }
+  #app{
+    width:100%; max-width:520px;
+    display:flex; flex-direction:column;
+    min-height:100vh;
+    background:var(--bg);
+  }
+  .mono{font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace;}
+
+  header.top{
+    padding:18px 20px 14px;
+    color:#f2ede0;
+  }
+  header.top .brand{
+    font-size:20px; font-weight:700; letter-spacing:.2px;
+  }
+  header.top .who{
+    font-size:13px; color:#9aa39a; margin-top:2px;
+  }
+
+  #setup-banner{
+    margin:0 16px 12px;
+    padding:12px 14px;
+    background:#3a2a20;
+    border:1px solid #6b4a33;
+    border-radius:10px;
+    color:#f3d9c6;
+    font-size:13px;
+    line-height:1.5;
+    display:none;
+  }
+
+  main{
+    flex:1;
+    background:var(--paper);
+    border-radius:20px 20px 0 0;
+    padding:20px 18px 100px;
+    position:relative;
+  }
+  main::before{
+    content:"";
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    width:40px; height:4px; border-radius:3px; background:var(--line);
+  }
+
+  .tab{display:none; padding-top:14px; animation:fade .18s ease;}
+  .tab.active{display:block;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+
+  h2.tab-title{
+    font-size:15px; text-transform:none; margin:0 0 14px;
+    color:var(--ink-soft); font-weight:600;
+    border-bottom:1px dashed var(--line); padding-bottom:10px;
+  }
+
+  label{
+    display:block; font-size:12.5px; color:var(--ink-soft); margin:14px 0 6px;
+  }
+  label:first-child{margin-top:0;}
+  input, select, textarea{
+    width:100%; padding:11px 12px; border-radius:10px;
+    border:1px solid var(--line); background:#fff;
+    font-size:15px; color:var(--ink); font-family:inherit;
+  }
+  input[type="number"]{font-family:'JetBrains Mono',monospace; font-size:17px;}
+  textarea{resize:none; min-height:44px;}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    width:100%; padding:13px; margin-top:18px;
+    background:var(--accent); color:#fff; border:none; border-radius:12px;
+    font-size:15px; font-weight:600; cursor:pointer;
+  }
+  .btn:active{opacity:.85;}
+  .btn.secondary{
+    background:transparent; color:var(--accent); border:1px solid var(--accent);
+  }
+  .btn.small{ width:auto; padding:8px 14px; margin-top:0; font-size:13px; }
+
+  .segmented{
+    display:flex; background:var(--paper-2); border-radius:10px; padding:3px; gap:3px;
+  }
+  .segmented button{
+    flex:1; border:none; background:transparent; padding:9px 6px; border-radius:8px;
+    font-size:13.5px; font-weight:600; color:var(--ink-soft); cursor:pointer;
+  }
+  .segmented button.active{ background:#fff; color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+
+  .row-between{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:14px; }
+
+  .chart-wrap{ position:relative; width:100%; max-width:280px; margin:20px auto 6px; }
+
+  .legend-list{ margin-top:16px; }
+  .legend-item{
+    display:flex; align-items:center; gap:10px; padding:9px 0;
+    border-bottom:1px solid var(--paper-2);
+    font-size:14px;
+  }
+  .legend-item:last-child{border-bottom:none;}
+  .dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .legend-item .name{ flex:1; }
+  .legend-item .amt{ font-family:'JetBrains Mono',monospace; font-weight:600; }
+  .legend-item .pct{ color:var(--ink-soft); font-size:12.5px; width:38px; text-align:right; }
+
+  .total-line{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-top:18px; padding-top:14px; border-top:1px dashed var(--line);
+    font-size:14px; color:var(--ink-soft);
+  }
+  .total-line .val{ font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:700; color:var(--ink); }
+
+  .budget-card{
+    padding:12px 0; border-bottom:1px solid var(--paper-2);
+  }
+  .budget-card:last-of-type{ border-bottom:none; }
+  .budget-head{ display:flex; justify-content:space-between; font-size:14px; margin-bottom:7px; }
+  .budget-head .cat{ font-weight:600; }
+  .budget-head .nums{ font-family:'JetBrains Mono',monospace; color:var(--ink-soft); }
+  .bar-track{ height:7px; background:var(--paper-2); border-radius:5px; overflow:hidden; }
+  .bar-fill{ height:100%; background:var(--accent); border-radius:5px; }
+  .bar-fill.over{ background:var(--danger); }
+  .budget-edit{ display:flex; gap:8px; margin-top:8px; }
+  .budget-edit input{ flex:1; padding:7px 9px; font-size:13px; }
+  .budget-edit button{ padding:7px 12px; font-size:12.5px; }
+
+  table.exp-table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+  table.exp-table th{ text-align:left; font-weight:600; color:var(--ink-soft); padding:6px 4px; border-bottom:1px solid var(--line); font-size:11.5px; }
+  table.exp-table td{ padding:7px 4px; border-bottom:1px solid var(--paper-2); vertical-align:top; }
+  table.exp-table td.amt{ font-family:'JetBrains Mono',monospace; text-align:right; white-space:nowrap; }
+  .table-scroll{ max-height:340px; overflow-y:auto; margin-top:10px; -webkit-overflow-scrolling:touch; }
+
+  .empty{ text-align:center; color:var(--ink-soft); font-size:13.5px; padding:30px 10px; }
+
+  nav#bottom-nav{
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:520px;
+    background:#fffdf8; border-top:1px solid var(--line);
+    display:flex;
+    padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+  }
+  nav#bottom-nav button{
+    flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:6px 2px; color:#9a9482; font-size:11px; font-weight:600; cursor:pointer;
+  }
+  nav#bottom-nav button .ic{ font-size:19px; }
+  nav#bottom-nav button.active{ color:var(--accent); }
+
+  .toast{
+    position:fixed; left:50%; bottom:96px; transform:translateX(-50%);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:20px;
+    font-size:13.5px; opacity:0; pointer-events:none; transition:opacity .25s, bottom .25s;
+    z-index:50;
+  }
+  .toast.show{ opacity:1; bottom:110px; }
+
+  select#f-month, select#chart-month, select#table-month{ font-family:'JetBrains Mono',monospace; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="top">
+    <div class="brand">Общая касса</div>
+    <div class="who" id="who-line">—</div>
+  </header>
+
+  <div id="setup-banner">
+    ⚠️ Firebase не настроен. Откройте index.html, вставьте свой firebaseConfig в начало
+    &lt;script type="module"&gt; и обновите страницу.
+  </div>
+
+  <main>
+
+    <!-- ADD -->
+    <section class="tab active" id="tab-add">
+      <h2 class="tab-title">Новая трата</h2>
+      <label for="f-amount">Сумма</label>
+      <input id="f-amount" type="number" inputmode="decimal" placeholder="0" min="0" step="0.01">
+
+      <label for="f-category">Категория</label>
+      <select id="f-category"></select>
+
+      <label for="f-date">Дата</label>
+      <input id="f-date" type="date">
+
+      <label for="f-note">Комментарий (необязательно)</label>
+      <textarea id="f-note" placeholder="На что потратили"></textarea>
+
+      <button class="btn" id="btn-add">Добавить трату</button>
+    </section>
+
+    <!-- CHARTS -->
+    <section class="tab" id="tab-charts">
+      <h2 class="tab-title">Траты по категориям</h2>
+      <div class="segmented" id="chart-scope">
+        <button data-scope="mine" class="active">Мои</button>
+        <button data-scope="all">Общие</button>
+      </div>
+      <div class="row-between">
+        <select id="chart-month"></select>
+      </div>
+      <div class="chart-wrap"><canvas id="pie-canvas"></canvas></div>
+      <div class="legend-list" id="chart-legend"></div>
+      <div class="total-line"><span>Всего за месяц</span><span class="val mono" id="chart-total">0 ₽</span></div>
+    </section>
+
+    <!-- TABLE -->
+    <section class="tab" id="tab-table">
+      <h2 class="tab-title">Список трат</h2>
+      <div class="segmented" id="table-scope">
+        <button data-scope="mine" class="active">Мои</button>
+        <button data-scope="all">Общие</button>
+      </div>
+      <div class="row-between">
+        <select id="table-month"></select>
+        <button class="btn small secondary" id="btn-export">Скачать CSV</button>
+      </div>
+      <div class="table-scroll">
+        <table class="exp-table" id="exp-table">
+          <thead><tr><th>Дата</th><th>Категория</th><th>Кто</th><th style="text-align:right">Сумма</th></tr></thead>
+          <tbody id="exp-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- BUDGETS -->
+    <section class="tab" id="tab-budgets">
+      <h2 class="tab-title">Категории и бюджеты на месяц</h2>
+      <div id="budgets-list"></div>
+
+      <label for="new-cat-name" style="margin-top:22px">Новая категория</label>
+      <div class="budget-edit">
+        <input id="new-cat-name" placeholder="Название">
+        <input id="new-cat-budget" type="number" placeholder="Бюджет" style="max-width:110px">
+        <button class="btn small" id="btn-add-cat">+</button>
+      </div>
+    </section>
+
+  </main>
+
+  <nav id="bottom-nav">
+    <button data-tab="add" class="active"><span class="ic">✚</span>Добавить</button>
+    <button data-tab="charts"><span class="ic">◔</span>Диаграмма</button>
+    <button data-tab="table"><span class="ic">≡</span>Таблица</button>
+    <button data-tab="budgets"><span class="ic">◧</span>Бюджеты</button>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, doc, setDoc, onSnapshot, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+/* =========================================================
+   1) ВСТАВЬТЕ СЮДА СВОЙ FIREBASE CONFIG (из консоли Firebase)
+   ========================================================= */
+const firebaseConfig = {
+ apiKey: "AIzaSyDjBUco7Ix9fki-15MlB6JH-LNUdG_Y-r0",
+  authDomain: "budget-bbe78.firebaseapp.com",
+  projectId: "budget-bbe78",
+  storageBucket: "budget-bbe78.firebasestorage.app",
+  messagingSenderId: "63817476810",
+  appId: "1:63817476810:web:6a304d2281f4ceb77b6233",
+  measurementId: "G-0ZHPGPZ2RB"
+};
+
+const isConfigured = !Object.values(firebaseConfig).some(v => String(v).includes("PASTE_ME"));
+if (!isConfigured) document.getElementById('setup-banner').style.display = 'block';
+
+let db = null;
+if (isConfigured) {
+  const fbApp = initializeApp(firebaseConfig);
+  db = getFirestore(fbApp);
+  const auth = getAuth(fbApp);
+  signInAnonymously(auth).catch(err => console.error("Auth error:", err));
+}
+
+/* ---------- Telegram context ---------- */
+const tg = window.Telegram?.WebApp;
+tg?.ready(); tg?.expand();
+const tgUser = tg?.initDataUnsafe?.user;
+const userId = tgUser ? String(tgUser.id) : "local-" + (localStorage.getItem('local-uid') || (() => {
+  const id = Math.random().toString(36).slice(2); localStorage.setItem('local-uid', id); return id;
+})());
+const userName = tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') : "Вы (браузер)";
+document.getElementById('who-line').textContent = userName;
+
+/* ---------- Palette for categories ---------- */
+const PALETTE = ['#2f6f4e','#a4791f','#b3402f','#3a6ea5','#8a5aa8','#4a8a8a','#a35b2f','#5a6b8a','#7a8a3a','#8a4a6b'];
+function colorFor(name, list){ const idx = list.findIndex(c => c.name === name); return PALETTE[(idx < 0 ? 0 : idx) % PALETTE.length]; }
+
+const DEFAULT_CATEGORIES = [
+  { name: "Еда", budget: 20000 },
+  { name: "Транспорт", budget: 6000 },
+  { name: "Жильё", budget: 40000 },
+  { name: "Развлечения", budget: 8000 },
+  { name: "Здоровье", budget: 5000 },
+  { name: "Связь и интернет", budget: 1500 },
+  { name: "Одежда", budget: 5000 },
+  { name: "Прочее", budget: 5000 },
+];
+
+/* ---------- State ---------- */
+let categories = [];
+let expenses = [];
+let chartInstance = null;
+let currentChartScope = 'mine';
+let currentTableScope = 'mine';
+
+/* ---------- Firestore refs & listeners ---------- */
+if (db) {
+  const catDocRef = doc(db, "meta", "categories");
+  onSnapshot(catDocRef, snap => {
+    if (snap.exists() && Array.isArray(snap.data().list) && snap.data().list.length) {
+      categories = snap.data().list;
+    } else {
+      categories = DEFAULT_CATEGORIES;
+      setDoc(catDocRef, { list: DEFAULT_CATEGORIES }).catch(()=>{});
+    }
+    renderCategorySelect();
+    renderBudgets();
+    renderChart();
+  });
+
+  onSnapshot(collection(db, "expenses"), snap => {
+    expenses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    populateMonthSelectors();
+    renderChart();
+    renderTable();
+    renderBudgets();
+  });
+} else {
+  categories = DEFAULT_CATEGORIES;
+  renderCategorySelect();
+  renderBudgets();
+}
+
+/* ---------- Helpers ---------- */
+function fmt(n){ return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽'; }
+function monthKey(dateStr){ return dateStr ? dateStr.slice(0,7) : ''; }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function currentMonthKey(){ return todayStr().slice(0,7); }
+function monthLabel(key){
+  const [y,m] = key.split('-');
+  const names = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  return `${names[parseInt(m,10)-1]} ${y}`;
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1600);
+}
+
+/* ---------- Tabs & nav ---------- */
+document.getElementById('bottom-nav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  document.querySelectorAll('#bottom-nav button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('main .tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+});
+
+/* ---------- Add expense ---------- */
+document.getElementById('f-date').value = todayStr();
+function renderCategorySelect(){
+  const sel = document.getElementById('f-category');
+  const prev = sel.value;
+  sel.innerHTML = categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+  if (prev && categories.some(c=>c.name===prev)) sel.value = prev;
+}
+
+document.getElementById('btn-add').addEventListener('click', async () => {
+  const amount = parseFloat(document.getElementById('f-amount').value);
+  const category = document.getElementById('f-category').value;
+  const date = document.getElementById('f-date').value || todayStr();
+  const note = document.getElementById('f-note').value.trim();
+  if (!amount || amount <= 0) { showToast('Укажите сумму'); return; }
+  if (!db) { showToast('Firebase не настроен'); return; }
+  try {
+    await addDoc(collection(db, "expenses"), {
+      amount, category, date, note, userId, userName, createdAt: serverTimestamp()
+    });
+    document.getElementById('f-amount').value = '';
+    document.getElementById('f-note').value = '';
+    showToast('Добавлено ✓');
+  } catch (err) {
+    console.error(err);
+    showToast('Ошибка записи');
+  }
+});
+
+/* ---------- Month selectors ---------- */
+function allMonthKeysFromData(){
+  const set = new Set(expenses.map(e => monthKey(e.date)));
+  set.add(currentMonthKey());
+  return Array.from(set).sort().reverse();
+}
+function populateMonthSelectors(){
+  const keys = allMonthKeysFromData();
+  ['chart-month','table-month'].forEach(id => {
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    sel.innerHTML = keys.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
+    sel.value = keys.includes(prev) ? prev : currentMonthKey();
+  });
+}
+
+/* ---------- Scope toggles ---------- */
+document.getElementById('chart-scope').addEventListener('click', e => {
+  const b = e.target.closest('button[data-scope]'); if (!b) return;
+  document.querySelectorAll('#chart-scope button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); currentChartScope = b.dataset.scope; renderChart();
+});
+document.getElementById('table-scope').addEventListener('click', e => {
+  const b = e.target.closest('button[data-scope]'); if (!b) return;
+  document.querySelectorAll('#table-scope button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); currentTableScope = b.dataset.scope; renderTable();
+});
+document.getElementById('chart-month').addEventListener('change', renderChart);
+document.getElementById('table-month').addEventListener('change', renderTable);
+
+/* ---------- Chart ---------- */
+function renderChart(){
+  const month = document.getElementById('chart-month').value || currentMonthKey();
+  const scoped = expenses.filter(e => monthKey(e.date) === month && (currentChartScope === 'all' || e.userId === userId));
+  const byCat = {};
+  scoped.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + Number(e.amount||0); });
+  const labels = Object.keys(byCat);
+  const values = labels.map(l => byCat[l]);
+  const total = values.reduce((a,b)=>a+b,0);
+  const colors = labels.map(l => colorFor(l, categories));
+
+  document.getElementById('chart-total').textContent = fmt(total);
+
+  const legend = document.getElementById('chart-legend');
+  if (!labels.length) {
+    legend.innerHTML = '<div class="empty">Трат за этот месяц пока нет</div>';
+  } else {
+    legend.innerHTML = labels
+      .map((l,i)=>({l,v:values[i],c:colors[i]}))
+      .sort((a,b)=>b.v-a.v)
+      .map(x => `<div class="legend-item">
+          <span class="dot" style="background:${x.c}"></span>
+          <span class="name">${x.l}</span>
+          <span class="pct">${total? Math.round(x.v/total*100):0}%</span>
+          <span class="amt">${fmt(x.v)}</span>
+        </div>`).join('');
+  }
+
+  const ctx = document.getElementById('pie-canvas').getContext('2d');
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#f7f3e8', borderWidth: 2 }] },
+    options: { plugins: { legend: { display: false } }, cutout: '55%' }
+  });
+}
+
+/* ---------- Table + export ---------- */
+function scopedRows(scope, month){
+  return expenses
+    .filter(e => monthKey(e.date) === month && (scope === 'all' || e.userId === userId))
+    .sort((a,b) => (a.date < b.date ? 1 : -1));
+}
+function renderTable(){
+  const month = document.getElementById('table-month').value || currentMonthKey();
+  const rows = scopedRows(currentTableScope, month);
+  const tbody = document.getElementById('exp-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty">Записей нет</td></tr>`;
+  } else {
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.date}</td>
+        <td>${r.category}${r.note ? '<br><span style="color:var(--ink-soft);font-size:12px">'+escapeHtml(r.note)+'</span>' : ''}</td>
+        <td>${currentTableScope==='all' ? escapeHtml(r.userName||'') : ''}</td>
+        <td class="amt">${fmt(r.amount)}</td>
+      </tr>`).join('');
+  }
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  const month = document.getElementById('table-month').value || currentMonthKey();
+  const rows = scopedRows(currentTableScope, month);
+  const header = ['Дата','Категория','Кто','Сумма','Комментарий'];
+  const csvRows = [header.join(';')].concat(
+    rows.map(r => [r.date, r.category, r.userName||'', String(r.amount).replace('.',','), (r.note||'').replace(/;/g,',')].join(';'))
+  );
+  const csv = '\uFEFF' + csvRows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `траты_${month}_${currentTableScope}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+/* ---------- Budgets ---------- */
+function renderBudgets(){
+  const month = currentMonthKey();
+  const spentByCat = {};
+  expenses.filter(e => monthKey(e.date) === month).forEach(e => {
+    spentByCat[e.category] = (spentByCat[e.category]||0) + Number(e.amount||0);
+  });
+  const list = document.getElementById('budgets-list');
+  list.innerHTML = categories.map((c, idx) => {
+    const spent = spentByCat[c.name] || 0;
+    const budget = Number(c.budget) || 0;
+    const pct = budget ? Math.min(100, Math.round(spent/budget*100)) : 0;
+    const over = budget && spent > budget;
+    return `
+      <div class="budget-card">
+        <div class="budget-head">
+          <span class="cat">${c.name}</span>
+          <span class="nums">${fmt(spent)} / ${fmt(budget)}</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill ${over?'over':''}" style="width:${budget? pct : 0}%"></div></div>
+        <div class="budget-edit">
+          <input type="number" placeholder="Новый бюджет" value="${budget || ''}" data-idx="${idx}" class="budget-input">
+          <button class="btn small secondary budget-save" data-idx="${idx}">Сохранить</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.budget-save').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = Number(btn.dataset.idx);
+      const input = list.querySelector(`.budget-input[data-idx="${idx}"]`);
+      const val = parseFloat(input.value);
+      if (isNaN(val) || val < 0) { showToast('Введите число'); return; }
+      const newList = categories.map((c,i) => i===idx ? { ...c, budget: val } : c);
+      if (db) await setDoc(doc(db, "meta", "categories"), { list: newList });
+      showToast('Бюджет обновлён');
+    });
+  });
+}
+
+document.getElementById('btn-add-cat').addEventListener('click', async () => {
+  const name = document.getElementById('new-cat-name').value.trim();
+  const budget = parseFloat(document.getElementById('new-cat-budget').value) || 0;
+  if (!name) { showToast('Введите название'); return; }
+  if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) { showToast('Такая категория уже есть'); return; }
+  const newList = [...categories, { name, budget }];
+  if (db) await setDoc(doc(db, "meta", "categories"), { list: newList });
+  document.getElementById('new-cat-name').value = '';
+  document.getElementById('new-cat-budget').value = '';
+  showToast('Категория добавлена');
+});
+
+/* ---------- Init render (no-firebase fallback) ---------- */
+populateMonthSelectors();
+renderChart();
+renderTable();
+</script>
+</body>
+</html>
