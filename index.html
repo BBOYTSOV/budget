@@ -252,6 +252,17 @@
   }
   .row-actions .row-del{ color:var(--danger); }
 
+  .admin-user-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:12px 0; border-bottom:1px solid var(--divider);
+  }
+  .admin-user-row:last-child{ border-bottom:none; }
+  .admin-user-name{ font-weight:600; font-size:14px; color:var(--text); }
+  .admin-user-meta{ font-size:12px; color:var(--text-soft); margin-top:2px; }
+  .credit-title-btn{ cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+  .credit-history-item{ display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--divider); font-size:13.5px; }
+  .credit-history-item:last-child{ border-bottom:none; }
+
   .empty{ text-align:center; color:var(--text-faint); font-size:13.5px; padding:30px 10px; }
 
   nav#bottom-nav{
@@ -328,13 +339,25 @@
   .summary-total-label{ font-size:13px; color:var(--text-soft); }
   .summary-total-value{ font-size:44px; font-weight:800; margin-top:6px; letter-spacing:-0.5px; color:var(--text); }
   .summary-users{ margin-top:22px; display:flex; flex-direction:column; gap:9px; text-align:left; }
+  .summary-month-nav{
+    display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:14px;
+  }
+  .summary-month-nav button{
+    background:var(--glass); border:1px solid var(--glass-border); color:var(--text);
+    width:30px; height:30px; border-radius:50%; font-size:16px; cursor:pointer; padding:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #summary-month-name{ font-size:14px; font-weight:600; color:var(--text); min-width:120px; }
+  .summary-extra{ margin-top:18px; padding-top:14px; border-top:1px solid var(--divider); display:flex; flex-direction:column; gap:8px; }
+  .summary-extra-row{ display:flex; justify-content:space-between; font-size:13.5px; color:var(--text-soft); }
+  .summary-extra-row .amt{ color:var(--text); font-weight:700; }
+  .summary-extra-row .amt.negative{ color:var(--danger); }
   .summary-user-row{ display:flex; justify-content:space-between; font-size:13.5px; color:var(--text-soft); }
   .summary-user-row .amt{ color:var(--text); font-weight:600; }
 
   select#chart-month, select#table-month, select#clear-month, select#chart-year{ font-family:'JetBrains Mono',monospace; }
 
-  #app.guest .app-content{ display:none; }
-  #app:not(.guest) #auth-screen{ display:none; }
+  #app.guest .app-content{ display:none; }  #app:not(.guest) #auth-screen{ display:none; }
   #auth-screen{
     flex:1; display:flex; align-items:center; justify-content:center; padding:24px; min-height:100vh;
   }
@@ -478,6 +501,47 @@
       </div>
     </section>
 
+    <!-- CREDIT / LOANS -->
+    <section class="tab" id="tab-credit">
+      <h2 class="tab-title">Расчёты</h2>
+      <div id="credit-list"></div>
+
+      <label for="credit-title" style="margin-top:22px">Название</label>
+      <input id="credit-title" placeholder="Например, ипотека">
+      <label for="credit-amount">Сумма</label>
+      <input id="credit-amount" type="number" placeholder="0" min="0" step="0.01">
+      <label for="credit-term">Срок (дата погашения)</label>
+      <input id="credit-term" type="date">
+      <button class="btn" id="btn-add-credit">Добавить запись</button>
+    </section>
+
+    <!-- INCOME (standalone, not linked to expenses/budgets) -->
+    <section class="tab" id="tab-income">
+      <h2 class="tab-title">Поступления</h2>
+      <div class="total-line"><span>Всего поступлений</span><span class="val mono" id="income-total-all">0 ₽</span></div>
+      <div class="total-line" style="margin-top:8px; padding-top:8px;"><span>Итого за <span id="income-month-label"></span></span><span class="val mono" id="income-total">0 ₽</span></div>
+      <div class="table-scroll">
+        <table class="exp-table" id="income-table">
+          <thead><tr><th>Дата</th><th>Кто</th><th style="text-align:right">Сумма</th><th></th></tr></thead>
+          <tbody id="income-tbody"></tbody>
+        </table>
+      </div>
+
+      <label for="income-amount" style="margin-top:22px">Сумма поступления</label>
+      <input id="income-amount" type="number" placeholder="0" min="0" step="0.01">
+      <label for="income-date">Дата</label>
+      <input id="income-date" type="date">
+      <label for="income-note">Откуда поступление (необязательно)</label>
+      <input id="income-note" type="text" placeholder="Например, зарплата">
+      <button class="btn" id="btn-add-income">Добавить поступление</button>
+    </section>
+
+    <!-- ADMIN (hidden unless logged in as the admin account) -->
+    <section class="tab" id="tab-admin">
+      <h2 class="tab-title">Пользователи</h2>
+      <div id="admin-users-list"></div>
+    </section>
+
   </main>
 
   <nav id="bottom-nav">
@@ -485,9 +549,21 @@
     <button data-tab="charts"><span class="ic">◔</span>Диаграмма</button>
     <button data-tab="table"><span class="ic">≡</span>Таблица</button>
     <button data-tab="budgets"><span class="ic">◧</span>Бюджеты</button>
+    <button data-tab="credit"><span class="ic">💳</span>Расчёты</button>
+    <button data-tab="income"><span class="ic">➕</span>Поступл.</button>
+    <button data-tab="admin" id="nav-admin-btn" style="display:none"><span class="ic">⚙</span>Админ</button>
   </nav>
 
   <div class="toast" id="toast"></div>
+
+  <!-- CREDIT/SETTLEMENT PAYMENT HISTORY -->
+  <div class="modal-overlay" id="credit-history-overlay">
+    <div class="modal-card">
+      <h3 id="credit-history-title">История пополнений</h3>
+      <div id="credit-history-list" style="margin-top:12px;"></div>
+      <button class="btn secondary" id="credit-history-close" style="margin-top:16px;">Закрыть</button>
+    </div>
+  </div>
 
   <!-- EDIT EXPENSE MODAL -->
   <div class="modal-overlay" id="edit-overlay">
@@ -512,9 +588,18 @@
   <div class="summary-overlay" id="summary-overlay">
     <div class="summary-card">
       <div class="summary-handle"></div>
+      <div class="summary-month-nav">
+        <button id="summary-prev-month" type="button">‹</button>
+        <div id="summary-month-name"></div>
+        <button id="summary-next-month" type="button">›</button>
+      </div>
       <div class="summary-total-label" id="summary-total-label">Потрачено в этом месяце</div>
       <div class="summary-total-value mono" id="summary-total">0 ₽</div>
       <div class="summary-users" id="summary-users"></div>
+      <div class="summary-extra">
+        <div class="summary-extra-row"><span>Поступления</span><span class="amt mono" id="summary-income">0 ₽</span></div>
+        <div class="summary-extra-row"><span>Осталось на месяц</span><span class="amt mono" id="summary-remaining">0 ₽</span></div>
+      </div>
     </div>
   </div>
   </div>
@@ -524,7 +609,8 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, doc, setDoc, deleteDoc, updateDoc, onSnapshot, serverTimestamp
+  getFirestore, collection, addDoc, doc, setDoc, deleteDoc, updateDoc, onSnapshot, serverTimestamp,
+  getDocs, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, onAuthStateChanged, signOut,
@@ -624,7 +710,15 @@ if (isConfigured) {
       renderWhoLine();
       appEl.classList.remove('guest');
       setStatus();
-      if (!listenersStarted) { listenersStarted = true; startFirestoreListeners(db); }
+
+      isAdmin = userName.trim().toLowerCase() === 'тест';
+      document.getElementById('nav-admin-btn').style.display = isAdmin ? '' : 'none';
+
+      if (!listenersStarted) {
+        listenersStarted = true;
+        startFirestoreListeners(db);
+        if (isAdmin) startAdminListener(db);
+      }
     } else {
       appEl.classList.add('guest');
     }
@@ -661,6 +755,7 @@ document.getElementById('auth-submit').addEventListener('click', async () => {
     if (authMode === 'register') {
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
       await updateProfile(cred.user, { displayName: rawName });
+      await setDoc(doc(db, "users", cred.user.uid), { username: rawName, createdAt: serverTimestamp() });
       userName = rawName; // the user object captured by onAuthStateChanged may predate this profile update
       renderWhoLine();
     } else {
@@ -703,6 +798,10 @@ let currentChartScope = 'mine';
 let currentChartPeriod = 'month';
 let currentTableScope = 'mine';
 let editingId = null;
+let isAdmin = false;
+let allUsers = [];
+let credits = [];
+let incomeEntries = [];
 
 function safeRun(fn, label){
   try { fn(); }
@@ -737,11 +836,85 @@ function startFirestoreListeners(db){
     safeRun(renderBudgets, 'renderBudgets');
     safeRun(renderTable, 'renderTable');
     safeRun(renderChart, 'renderChart');
+    if (isAdmin) safeRun(renderAdminPanel, 'renderAdminPanel');
   }, err => {
     console.error('expenses onSnapshot error:', err);
     setStatus('error', `❌ Ошибка чтения трат: ${err.code}. Обычно это значит, что правила доступа Firestore не разрешают чтение — проверьте вкладку Rules.`);
   });
+
+  onSnapshot(collection(db, "credits"), snap => {
+    credits = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    safeRun(renderCredits, 'renderCredits');
+  }, err => {
+    console.error('credits onSnapshot error:', err);
+    setStatus('error', `❌ Ошибка чтения кредитов: ${err.code}.`);
+  });
+
+  onSnapshot(collection(db, "income"), snap => {
+    incomeEntries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    safeRun(renderIncome, 'renderIncome');
+  }, err => {
+    console.error('income onSnapshot error:', err);
+    setStatus('error', `❌ Ошибка чтения поступлений: ${err.code}.`);
+  });
 }
+
+/* ---------- Admin panel (users list + cleanup) ---------- */
+function startAdminListener(db){
+  onSnapshot(collection(db, "users"), snap => {
+    allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    safeRun(renderAdminPanel, 'renderAdminPanel');
+  }, err => {
+    console.error('users onSnapshot error:', err);
+    setStatus('error', `❌ Ошибка чтения списка пользователей: ${err.code}.`);
+  });
+}
+
+function renderAdminPanel(){
+  const list = document.getElementById('admin-users-list');
+  if (!list) return;
+  if (!allUsers.length) {
+    list.innerHTML = '<div class="empty">Пользователей пока нет</div>';
+    return;
+  }
+  list.innerHTML = allUsers
+    .slice()
+    .sort((a,b) => (a.username || '').localeCompare(b.username || ''))
+    .map(u => {
+      const theirExpenses = expenses.filter(e => e.userId === u.id);
+      const total = theirExpenses.reduce((s,e) => s + Number(e.amount||0), 0);
+      const created = (u.createdAt && u.createdAt.toDate) ? u.createdAt.toDate().toLocaleDateString('ru-RU') : '—';
+      return `
+        <div class="admin-user-row">
+          <div class="admin-user-info">
+            <div class="admin-user-name">${escapeHtml(u.username || 'Без имени')}</div>
+            <div class="admin-user-meta">Записей: ${theirExpenses.length} · ${fmt(total)} · с ${created}</div>
+          </div>
+          <button class="btn small danger admin-user-del" data-id="${u.id}">Удалить</button>
+        </div>`;
+    }).join('');
+}
+
+document.getElementById('admin-users-list').addEventListener('click', async e => {
+  const btn = e.target.closest('.admin-user-del');
+  if (!btn) return;
+  const uid = btn.dataset.id;
+  const u = allUsers.find(x => x.id === uid);
+  if (!u || !db) return;
+  const ok = await confirmAction(`Удалить пользователя «${u.username}» и все его траты? Отменить нельзя.`);
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    const theirExpenses = expenses.filter(e => e.userId === uid);
+    for (const e of theirExpenses) await deleteDoc(doc(db, "expenses", e.id));
+    await deleteDoc(doc(db, "users", uid));
+    showToast('Пользователь удалён из списка');
+  } catch (err) {
+    console.error(err);
+    showToast(`Ошибка удаления: ${err.code || err.message}`);
+    btn.disabled = false;
+  }
+});
 
 if (!db) {
   categories = DEFAULT_CATEGORIES;
@@ -787,6 +960,7 @@ document.getElementById('bottom-nav').addEventListener('click', e => {
 
 /* ---------- Add expense ---------- */
 document.getElementById('f-date').value = todayStr();
+document.getElementById('income-date').value = todayStr();
 
 document.getElementById('btn-add').addEventListener('click', async () => {
   const amount = parseFloat(document.getElementById('f-amount').value);
@@ -961,6 +1135,48 @@ function renderTable(){
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+/* Shared helpers: update local state immediately, then sync to Firestore in the background. */
+async function deleteExpenseById(id){
+  const idx = expenses.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const backup = expenses[idx];
+  expenses.splice(idx, 1);
+  safeRun(renderTable, 'renderTable');
+  safeRun(renderBudgets, 'renderBudgets');
+  safeRun(renderChart, 'renderChart');
+  if (isAdmin) safeRun(renderAdminPanel, 'renderAdminPanel');
+  try {
+    await deleteDoc(doc(db, "expenses", id));
+    showToast('Удалено');
+  } catch (err) {
+    console.error('delete failed:', err);
+    expenses.splice(idx, 0, backup); // roll back the optimistic removal
+    safeRun(renderTable, 'renderTable');
+    safeRun(renderBudgets, 'renderBudgets');
+    safeRun(renderChart, 'renderChart');
+    showToast(`Не удалено: ${err.code || err.message}`);
+  }
+}
+async function saveExpenseEdit(id, fields){
+  const idx = expenses.findIndex(x => x.id === id);
+  const backup = idx !== -1 ? { ...expenses[idx] } : null;
+  if (idx !== -1) expenses[idx] = { ...expenses[idx], ...fields };
+  safeRun(renderTable, 'renderTable');
+  safeRun(renderBudgets, 'renderBudgets');
+  safeRun(renderChart, 'renderChart');
+  try {
+    await updateDoc(doc(db, "expenses", id), fields);
+    showToast('Изменения сохранены');
+  } catch (err) {
+    console.error('update failed:', err);
+    if (idx !== -1 && backup) expenses[idx] = backup; // roll back
+    safeRun(renderTable, 'renderTable');
+    safeRun(renderBudgets, 'renderBudgets');
+    safeRun(renderChart, 'renderChart');
+    showToast(`Не сохранено: ${err.code || err.message}`);
+  }
+}
+
 document.getElementById('exp-tbody').addEventListener('click', e => {
   const editBtn = e.target.closest('.row-edit');
   const delBtn = e.target.closest('.row-del');
@@ -970,12 +1186,13 @@ document.getElementById('exp-tbody').addEventListener('click', e => {
   }
   if (delBtn) {
     (async () => {
+      if (delBtn.disabled) return;
       const row = expenses.find(x => x.id === delBtn.dataset.id);
       if (!row || !db) return;
       const ok = await confirmAction('Удалить эту трату? Отменить нельзя.');
       if (!ok) return;
-      try { await deleteDoc(doc(db, "expenses", row.id)); showToast('Удалено'); }
-      catch (err) { console.error(err); showToast('Ошибка удаления'); }
+      delBtn.disabled = true;
+      await deleteExpenseById(row.id);
     })();
   }
 });
@@ -1001,27 +1218,17 @@ document.getElementById('edit-save').addEventListener('click', async () => {
   const date = document.getElementById('edit-date').value;
   const note = document.getElementById('edit-note').value.trim();
   if (!amount || amount <= 0) { showToast('Укажите сумму'); return; }
-  try {
-    await updateDoc(doc(db, "expenses", editingId), { amount, category, date, note });
-    showToast('Изменения сохранены');
-    closeEditModal();
-  } catch (err) {
-    console.error(err);
-    showToast('Ошибка сохранения');
-  }
+  const id = editingId;
+  closeEditModal();
+  await saveExpenseEdit(id, { amount, category, date, note });
 });
 document.getElementById('edit-delete').addEventListener('click', async () => {
   if (!editingId || !db) return;
   const ok = await confirmAction('Удалить эту трату? Отменить нельзя.');
   if (!ok) return;
-  try {
-    await deleteDoc(doc(db, "expenses", editingId));
-    showToast('Удалено');
-    closeEditModal();
-  } catch (err) {
-    console.error(err);
-    showToast('Ошибка удаления');
-  }
+  const id = editingId;
+  closeEditModal();
+  await deleteExpenseById(id);
 });
 
 /* ---------- CSV export: Имя пользователя;Категория;Сумма, chronological order ---------- */
@@ -1067,13 +1274,17 @@ function renderBudgets(){
     return `
       <div class="budget-card">
         <div class="budget-head">
-          <span class="cat">${c.name}</span>
+          <span class="cat">${escapeHtml(c.name)}</span>
           <span class="nums">${fmt(spent)} / ${fmt(budget)}</span>
         </div>
         <div class="bar-track"><div class="bar-fill ${over?'over':''}" style="width:${budget? pct : 0}%"></div></div>
         <div class="budget-edit">
-          <input type="number" placeholder="Новый бюджет" value="${budget || ''}" data-idx="${idx}" class="budget-input">
+          <input type="text" placeholder="Название" value="${escapeHtml(c.name)}" data-idx="${idx}" class="cat-name-input">
+          <input type="number" placeholder="Бюджет" value="${budget || ''}" data-idx="${idx}" class="budget-input" style="max-width:100px">
+        </div>
+        <div class="budget-edit" style="margin-top:6px;">
           <button class="btn small secondary budget-save" data-idx="${idx}">Сохранить</button>
+          <button class="btn small danger secondary cat-delete" data-idx="${idx}">Удалить</button>
         </div>
       </div>`;
   }).join('');
@@ -1081,15 +1292,249 @@ function renderBudgets(){
   list.querySelectorAll('.budget-save').forEach(btn => {
     btn.addEventListener('click', async () => {
       const idx = Number(btn.dataset.idx);
-      const input = list.querySelector(`.budget-input[data-idx="${idx}"]`);
-      const val = parseFloat(input.value);
-      if (isNaN(val) || val < 0) { showToast('Введите число'); return; }
-      const newList = categories.map((c,i) => i===idx ? { ...c, budget: val } : c);
-      if (db) await setDoc(doc(db, "meta", "categories"), { list: newList });
-      showToast('Бюджет обновлён');
+      const nameInput = list.querySelector(`.cat-name-input[data-idx="${idx}"]`);
+      const budgetInput = list.querySelector(`.budget-input[data-idx="${idx}"]`);
+      const newName = nameInput.value.trim();
+      const newBudget = parseFloat(budgetInput.value);
+      if (!newName) { showToast('Введите название'); return; }
+      if (isNaN(newBudget) || newBudget < 0) { showToast('Введите число для бюджета'); return; }
+      if (categories.some((c,i) => i !== idx && c.name.toLowerCase() === newName.toLowerCase())) {
+        showToast('Такая категория уже есть'); return;
+      }
+      const oldName = categories[idx].name;
+      const newList = categories.map((c,i) => i===idx ? { name: newName, budget: newBudget } : c);
+      if (!db) return;
+      btn.disabled = true;
+      try {
+        await setDoc(doc(db, "meta", "categories"), { list: newList });
+        if (newName !== oldName) {
+          const affected = expenses.filter(e => e.category === oldName);
+          for (const e of affected) await updateDoc(doc(db, "expenses", e.id), { category: newName });
+        }
+        showToast('Категория обновлена');
+      } catch (err) {
+        console.error(err);
+        showToast(`Ошибка: ${err.code || err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  list.querySelectorAll('.cat-delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = Number(btn.dataset.idx);
+      const cat = categories[idx];
+      if (categories.length <= 1) { showToast('Должна остаться хотя бы одна категория'); return; }
+      const usedCount = expenses.filter(e => e.category === cat.name).length;
+      const msg = usedCount
+        ? `Удалить категорию «${cat.name}»? В ней ${usedCount} трат — они останутся в истории с этим названием, но категория пропадёт из списка выбора.`
+        : `Удалить категорию «${cat.name}»?`;
+      const ok = await confirmAction(msg);
+      if (!ok) return;
+      const newList = categories.filter((_,i) => i !== idx);
+      if (!db) return;
+      btn.disabled = true;
+      try {
+        await setDoc(doc(db, "meta", "categories"), { list: newList });
+        showToast('Категория удалена');
+      } catch (err) {
+        console.error(err);
+        showToast(`Ошибка: ${err.code || err.message}`);
+        btn.disabled = false;
+      }
     });
   });
 }
+
+/* ---------- Credit / loans ---------- */
+function renderCredits(){
+  const list = document.getElementById('credit-list');
+  if (!credits.length) { list.innerHTML = '<div class="empty">Пока нет записей</div>'; return; }
+  const sorted = credits.slice().sort((a,b) => (a.term || '9999').localeCompare(b.term || '9999'));
+  list.innerHTML = sorted.map(c => {
+    const total = Number(c.totalAmount) || 0;
+    const remaining = Math.max(Number(c.remaining) || 0, 0);
+    const paidPct = total ? Math.min(100, Math.round((total - remaining) / total * 100)) : 0;
+    const done = remaining <= 0;
+    const termLabel = c.term ? c.term : 'без срока';
+    return `
+      <div class="budget-card">
+        <div class="budget-head">
+          <span class="cat credit-title-btn" data-id="${c.id}" data-title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</span>
+          <span class="nums">${done ? 'Погашено ✓' : fmt(remaining) + ' / ' + fmt(total)}</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${paidPct}%"></div></div>
+        <div class="admin-user-meta" style="margin-top:6px;">Срок: ${termLabel} · добавил(а) ${escapeHtml(c.userName || '')}</div>
+        ${done ? '' : `
+        <div class="budget-edit" style="margin-top:8px;">
+          <input type="number" placeholder="Внести сумму" class="credit-pay-input" data-id="${c.id}" min="0" step="0.01">
+          <button class="btn small secondary credit-pay-btn" data-id="${c.id}">Внести</button>
+        </div>`}
+        <button class="btn small danger secondary credit-del-btn" data-id="${c.id}" style="margin-top:8px; width:100%;">Удалить запись</button>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.credit-pay-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const input = list.querySelector(`.credit-pay-input[data-id="${id}"]`);
+      const amount = parseFloat(input.value);
+      if (!amount || amount <= 0) { showToast('Укажите сумму'); return; }
+      const c = credits.find(x => x.id === id);
+      if (!c || !db) return;
+      const newRemaining = Math.max((Number(c.remaining) || 0) - amount, 0);
+      btn.disabled = true;
+      try {
+        await updateDoc(doc(db, "credits", id), { remaining: newRemaining });
+        await addDoc(collection(db, "credits", id, "payments"), {
+          amount, date: todayStr(), userName, createdAt: serverTimestamp()
+        });
+        showToast('Сумма внесена');
+      } catch (err) {
+        console.error(err);
+        showToast(`Ошибка: ${err.code || err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  list.querySelectorAll('.credit-del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const ok = await confirmAction('Удалить эту запись о кредите/долге? Отменить нельзя.');
+      if (!ok || !db) return;
+      btn.disabled = true;
+      try {
+        await deleteDoc(doc(db, "credits", id));
+        showToast('Запись удалена');
+      } catch (err) {
+        console.error(err);
+        showToast(`Ошибка: ${err.code || err.message}`);
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+document.getElementById('btn-add-credit').addEventListener('click', async () => {
+  const title = document.getElementById('credit-title').value.trim();
+  const totalAmount = parseFloat(document.getElementById('credit-amount').value);
+  const term = document.getElementById('credit-term').value;
+  if (!title) { showToast('Введите название'); return; }
+  if (!totalAmount || totalAmount <= 0) { showToast('Укажите сумму'); return; }
+  if (!db) { showToast('Firebase не настроен'); return; }
+  try {
+    await addDoc(collection(db, "credits"), {
+      title, totalAmount, remaining: totalAmount, term, userId, userName, createdAt: serverTimestamp()
+    });
+    document.getElementById('credit-title').value = '';
+    document.getElementById('credit-amount').value = '';
+    document.getElementById('credit-term').value = '';
+    showToast('Добавлено ✓');
+  } catch (err) {
+    console.error(err);
+    showToast(`Ошибка: ${err.code || err.message}`);
+  }
+});
+
+/* ---------- Credit/settlement payment history ---------- */
+const creditHistoryOverlay = document.getElementById('credit-history-overlay');
+document.getElementById('credit-list').addEventListener('click', e => {
+  const t = e.target.closest('.credit-title-btn');
+  if (t) openCreditHistory(t.dataset.id, t.dataset.title);
+});
+document.getElementById('credit-history-close').addEventListener('click', () => {
+  creditHistoryOverlay.classList.remove('show');
+});
+creditHistoryOverlay.addEventListener('click', e => {
+  if (e.target === creditHistoryOverlay) creditHistoryOverlay.classList.remove('show');
+});
+
+async function openCreditHistory(creditId, title){
+  document.getElementById('credit-history-title').textContent = `История пополнений: ${title}`;
+  const listEl = document.getElementById('credit-history-list');
+  listEl.innerHTML = '<div class="empty">Загрузка…</div>';
+  creditHistoryOverlay.classList.add('show');
+  if (!db) return;
+  try {
+    const q = query(collection(db, "credits", creditId, "payments"), orderBy("date", "desc"));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      listEl.innerHTML = '<div class="empty">Пополнений пока не было</div>';
+      return;
+    }
+    listEl.innerHTML = snap.docs.map(d => {
+      const p = d.data();
+      return `<div class="credit-history-item">
+        <span>${p.date || ''}${p.userName ? ' · ' + escapeHtml(p.userName) : ''}</span>
+        <span class="mono">${fmt(p.amount)}</span>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = `<div class="empty">Ошибка загрузки: ${err.code || err.message}</div>`;
+  }
+}
+
+/* ---------- Income (standalone — not linked to expenses/budgets) ---------- */
+function renderIncome(){
+  const month = currentMonthKey();
+  const monthEntries = incomeEntries.filter(e => monthKey(e.date) === month);
+  const total = monthEntries.reduce((s,e) => s + Number(e.amount||0), 0);
+  const allTimeTotal = incomeEntries.reduce((s,e) => s + Number(e.amount||0), 0);
+  document.getElementById('income-month-label').textContent = monthLabel(month);
+  document.getElementById('income-total').textContent = fmt(total);
+  document.getElementById('income-total-all').textContent = fmt(allTimeTotal);
+
+  const tbody = document.getElementById('income-tbody');
+  const sorted = incomeEntries.slice().sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  if (!sorted.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty">Записей нет</td></tr>`;
+  } else {
+    tbody.innerHTML = sorted.map(e => `
+      <tr>
+        <td>${e.date}${e.note ? '<br><span style="color:var(--text-faint);font-size:12px">'+escapeHtml(e.note)+'</span>' : ''}</td>
+        <td>${escapeHtml(e.userName || '')}</td>
+        <td class="amt">${fmt(e.amount)}</td>
+        <td><div class="row-actions"><button class="income-del" data-id="${e.id}" title="Удалить">🗑</button></div></td>
+      </tr>`).join('');
+  }
+}
+
+document.getElementById('income-tbody').addEventListener('click', async e => {
+  const btn = e.target.closest('.income-del');
+  if (!btn || !db) return;
+  const ok = await confirmAction('Удалить это поступление? Отменить нельзя.');
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    await deleteDoc(doc(db, "income", btn.dataset.id));
+    showToast('Удалено');
+  } catch (err) {
+    console.error(err);
+    showToast(`Ошибка: ${err.code || err.message}`);
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btn-add-income').addEventListener('click', async () => {
+  const amount = parseFloat(document.getElementById('income-amount').value);
+  const date = document.getElementById('income-date').value || todayStr();
+  const note = document.getElementById('income-note').value.trim();
+  if (!amount || amount <= 0) { showToast('Укажите сумму'); return; }
+  if (!db) { showToast('Firebase не настроен'); return; }
+  try {
+    await addDoc(collection(db, "income"), { amount, date, note, userId, userName, createdAt: serverTimestamp() });
+    document.getElementById('income-amount').value = '';
+    document.getElementById('income-note').value = '';
+    showToast('Добавлено ✓');
+  } catch (err) {
+    console.error(err);
+    showToast(`Ошибка: ${err.code || err.message}`);
+  }
+});
 
 /* ---------- Clear data ---------- */
 let currentClearScope = 'mine';
@@ -1136,11 +1581,21 @@ document.getElementById('btn-add-cat').addEventListener('click', async () => {
 
 /* ---------- Swipe-down monthly summary panel ---------- */
 const summaryOverlay = document.getElementById('summary-overlay');
+let summaryMonth = currentMonthKey();
+
+function shiftMonthKey(key, delta){
+  const [y,m] = key.split('-').map(Number);
+  const d = new Date(y, (m - 1) + delta, 1);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+
 function renderSummaryPanel(){
-  const month = currentMonthKey();
+  const month = summaryMonth;
+  document.getElementById('summary-month-name').textContent = monthLabel(month);
+  document.getElementById('summary-total-label').textContent = 'Потрачено';
+
   const monthExpenses = expenses.filter(e => monthKey(e.date) === month);
   const total = monthExpenses.reduce((s,e) => s + Number(e.amount||0), 0);
-  document.getElementById('summary-total-label').textContent = `Потрачено в ${monthLabel(month)}`;
   document.getElementById('summary-total').textContent = fmt(total);
 
   const byUser = {};
@@ -1154,10 +1609,31 @@ function renderSummaryPanel(){
   usersEl.innerHTML = rows.length
     ? rows.map(u => `<div class="summary-user-row"><span>${escapeHtml(u.name)}</span><span class="amt mono">${fmt(u.sum)}</span></div>`).join('')
     : '<div class="summary-user-row"><span>Пока нет трат в этом месяце</span></div>';
+
+  const monthIncome = incomeEntries.filter(e => monthKey(e.date) === month).reduce((s,e) => s + Number(e.amount||0), 0);
+  const remaining = monthIncome - total;
+  document.getElementById('summary-income').textContent = fmt(monthIncome);
+  const remEl = document.getElementById('summary-remaining');
+  remEl.textContent = fmt(remaining);
+  remEl.classList.toggle('negative', remaining < 0);
 }
-function openSummaryPanel(){ renderSummaryPanel(); summaryOverlay.classList.add('show'); }
+function openSummaryPanel(){
+  summaryMonth = currentMonthKey();
+  renderSummaryPanel();
+  summaryOverlay.classList.add('show');
+}
 function closeSummaryPanel(){ summaryOverlay.classList.remove('show'); }
-summaryOverlay.addEventListener('click', closeSummaryPanel);
+summaryOverlay.addEventListener('click', e => { if (e.target === summaryOverlay) closeSummaryPanel(); });
+document.getElementById('summary-prev-month').addEventListener('click', e => {
+  e.stopPropagation();
+  summaryMonth = shiftMonthKey(summaryMonth, -1);
+  renderSummaryPanel();
+});
+document.getElementById('summary-next-month').addEventListener('click', e => {
+  e.stopPropagation();
+  summaryMonth = shiftMonthKey(summaryMonth, 1);
+  renderSummaryPanel();
+});
 
 const dragHandle = document.getElementById('drag-handle');
 let dragStartY = null, isDragging = false;
