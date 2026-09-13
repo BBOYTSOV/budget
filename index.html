@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Общая касса</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
     --text:#f3f5fb;
@@ -101,10 +100,7 @@
     background:none; border:none; padding:0;
     color:var(--accent1); font-size:11.5px; text-decoration:underline; cursor:pointer;
   }
-  .name-edit-row{
-    display:none; gap:8px; margin-top:10px;
-  }
-  .name-edit-row input{ flex:1; }
+  .who-edit-btn:hover{ opacity:.8; }
 
   #setup-banner{
     margin:0 16px 12px;
@@ -118,6 +114,17 @@
     display:none;
     backdrop-filter: blur(16px);
   }
+  .status-banner{
+    margin:0 16px 12px;
+    padding:12px 14px;
+    border-radius:14px;
+    font-size:12.5px;
+    line-height:1.55;
+    display:none;
+    backdrop-filter: blur(16px);
+  }
+  .status-banner.error{ background:rgba(251,113,133,0.14); border:1px solid rgba(251,113,133,0.4); color:#ffd7de; }
+  .status-banner.info{ background:rgba(103,232,249,0.12); border:1px solid rgba(103,232,249,0.35); color:#d3f6fc; }
 
   main{
     flex:1;
@@ -325,10 +332,48 @@
   .summary-user-row .amt{ color:var(--text); font-weight:600; }
 
   select#chart-month, select#table-month, select#clear-month, select#chart-year{ font-family:'JetBrains Mono',monospace; }
+
+  #app.guest .app-content{ display:none; }
+  #app:not(.guest) #auth-screen{ display:none; }
+  #auth-screen{
+    flex:1; display:flex; align-items:center; justify-content:center; padding:24px; min-height:100vh;
+  }
+  .auth-card{
+    width:100%; max-width:360px;
+    background:var(--glass-strong);
+    backdrop-filter: blur(30px) saturate(160%);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+    border:1px solid var(--glass-border); border-radius:26px;
+    padding:28px 24px; box-shadow:var(--panel-shadow); text-align:center;
+  }
+  .auth-card .brand{ font-size:20px; font-weight:700; color:var(--text); }
+  .auth-sub{ font-size:12.5px; color:var(--text-soft); margin:8px 0 18px; line-height:1.55; }
+  .auth-card label{ text-align:left; }
+  .auth-card .btn{ margin-top:20px; }
+  .auth-error{ color:var(--danger); font-size:12.5px; margin-top:10px; min-height:16px; }
 </style>
 </head>
 <body>
-<div id="app">
+<div id="app" class="guest">
+
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="brand">Общая касса</div>
+      <div class="auth-sub">Войдите в свой аккаунт — тогда ваши траты будут узнаваться на любом устройстве, где вы войдёте под тем же именем.</div>
+      <div class="segmented" id="auth-mode">
+        <button data-mode="login" class="active">Вход</button>
+        <button data-mode="register">Регистрация</button>
+      </div>
+      <label for="auth-username">Имя пользователя</label>
+      <input id="auth-username" type="text" autocomplete="username" placeholder="например, Аня" maxlength="30">
+      <label for="auth-password">Пароль</label>
+      <input id="auth-password" type="password" autocomplete="current-password" placeholder="минимум 6 символов">
+      <button class="btn" id="auth-submit">Войти</button>
+      <div class="auth-error" id="auth-error"></div>
+    </div>
+  </div>
+
+  <div class="app-content">
 
   <header class="top">
     <div class="brand-row">
@@ -337,11 +382,7 @@
     </div>
     <div class="who-row">
       <div class="who" id="who-line">—</div>
-      <button class="who-edit-btn" id="btn-edit-name">изменить</button>
-    </div>
-    <div class="name-edit-row" id="name-edit-row">
-      <input id="name-edit-input" type="text" placeholder="Ваше имя" maxlength="40">
-      <button class="btn small" id="btn-save-name">Сохранить</button>
+      <button class="who-edit-btn" id="btn-logout">выйти</button>
     </div>
   </header>
 
@@ -349,6 +390,7 @@
     ⚠️ Firebase не настроен. Откройте index.html, вставьте свой firebaseConfig в начало
     &lt;script type="module"&gt; и обновите страницу.
   </div>
+  <div id="status-banner" class="status-banner"></div>
 
   <main>
     <div class="drag-handle" id="drag-handle"></div>
@@ -475,6 +517,7 @@
       <div class="summary-users" id="summary-users"></div>
     </div>
   </div>
+  </div>
 
 </div>
 
@@ -483,7 +526,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getFirestore, collection, addDoc, doc, setDoc, deleteDoc, updateDoc, onSnapshot, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getAuth, onAuthStateChanged, signOut,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+  setPersistence, browserLocalPersistence
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* =========================================================
    1) FIREBASE CONFIG
@@ -501,6 +548,14 @@ const firebaseConfig = {
 const isConfigured = !Object.values(firebaseConfig).some(v => String(v).includes("PASTE_ME"));
 if (!isConfigured) document.getElementById('setup-banner').style.display = 'block';
 
+function setStatus(type, message){
+  const el = document.getElementById('status-banner');
+  if (!message) { el.style.display = 'none'; return; }
+  el.className = 'status-banner ' + type;
+  el.textContent = message;
+  el.style.display = 'block';
+}
+
 /* ---------- Theme (dark / light liquid glass) ---------- */
 const THEME_KEY = 'kassa-theme-v1';
 function applyTheme(t){
@@ -513,62 +568,118 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
   currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
   localStorage.setItem(THEME_KEY, currentTheme);
   applyTheme(currentTheme);
-  renderChart(); // repaint slice borders in the new theme's color
+  renderChart();
 });
 
 let db = null;
+let userId = null;
+let userName = '';
+
+function renderWhoLine(){
+  document.getElementById('who-line').textContent = userName || '—';
+}
+
+const CYRILLIC_MAP = {
+  а:'a', б:'b', в:'v', г:'g', д:'d', е:'e', ё:'e', ж:'zh', з:'z', и:'i', й:'y',
+  к:'k', л:'l', м:'m', н:'n', о:'o', п:'p', р:'r', с:'s', т:'t', у:'u', ф:'f',
+  х:'h', ц:'c', ч:'ch', ш:'sh', щ:'sch', ъ:'', ы:'y', ь:'', э:'e', ю:'yu', я:'ya'
+};
+function transliterate(str){
+  return str.toLowerCase().split('').map(ch => CYRILLIC_MAP[ch] !== undefined ? CYRILLIC_MAP[ch] : ch).join('');
+}
+function usernameToEmail(u){
+  const base = transliterate(u.trim()).replace(/[^a-z0-9_.-]/g, '');
+  return (base || 'user') + '@kassa.local';
+}
+function describeAuthError(code){
+  const map = {
+    'auth/email-already-in-use': 'Это имя пользователя уже занято',
+    'auth/invalid-email': 'Недопустимое имя пользователя (используйте буквы/цифры)',
+    'auth/weak-password': 'Пароль слишком простой — минимум 6 символов',
+    'auth/user-not-found': 'Пользователь с таким именем не найден',
+    'auth/wrong-password': 'Неверный пароль',
+    'auth/invalid-credential': 'Неверное имя пользователя или пароль',
+    'auth/too-many-requests': 'Слишком много попыток входа. Подождите немного.',
+    'auth/network-request-failed': 'Нет соединения с сервером Firebase',
+    'auth/operation-not-allowed': 'В Firebase не включён вход по Email/Password: Authentication → Sign-in method → Email/Password → Enable → Save.',
+  };
+  return map[code] || ('Ошибка входа: ' + code);
+}
+
+let auth = null;
 if (isConfigured) {
   const fbApp = initializeApp(firebaseConfig);
   db = getFirestore(fbApp);
-  const auth = getAuth(fbApp);
-  signInAnonymously(auth).catch(err => console.error("Auth error:", err));
+  auth = getAuth(fbApp);
+
+  // Keep the user signed in after closing the browser/tab (persists in IndexedDB/localStorage on this device).
+  setPersistence(auth, browserLocalPersistence).catch(err => console.error('Persistence setup failed:', err));
+
+  let listenersStarted = false;
+  onAuthStateChanged(auth, user => {
+    const appEl = document.getElementById('app');
+    if (user) {
+      userId = user.uid;
+      userName = user.displayName || 'Без имени';
+      renderWhoLine();
+      appEl.classList.remove('guest');
+      setStatus();
+      if (!listenersStarted) { listenersStarted = true; startFirestoreListeners(db); }
+    } else {
+      appEl.classList.add('guest');
+    }
+  });
+} else {
+  setStatus('error', 'Firebase не настроен — см. жёлтое предупреждение выше.');
 }
 
-/* ---------- Telegram context ---------- */
-const tg = window.Telegram?.WebApp;
-tg?.ready(); tg?.expand();
-const tgUser = tg?.initDataUnsafe?.user;
-const userId = tgUser ? String(tgUser.id) : "local-" + (localStorage.getItem('local-uid') || (() => {
-  const id = Math.random().toString(36).slice(2); localStorage.setItem('local-uid', id); return id;
-})());
-
-/* ---------- Persisted display name ---------- */
-const NAME_KEY = 'kassa-username-v1';
-function loadStoredName(){ return (localStorage.getItem(NAME_KEY) || '').trim(); }
-function saveStoredName(n){ localStorage.setItem(NAME_KEY, n); }
-
-let userName = loadStoredName();
-const isFirstVisit = !userName;
-if (!userName) {
-  userName = tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') : '';
-  if (userName) saveStoredName(userName);
-}
-
-function renderWhoLine(){
-  document.getElementById('who-line').textContent = userName || 'Без имени';
-}
-renderWhoLine();
-
-const nameEditRow = document.getElementById('name-edit-row');
-const nameEditInput = document.getElementById('name-edit-input');
-document.getElementById('btn-edit-name').addEventListener('click', () => {
-  nameEditInput.value = userName;
-  nameEditRow.style.display = 'flex';
-  nameEditInput.focus();
+/* ---------- Login / registration screen ---------- */
+let authMode = 'login';
+document.getElementById('auth-mode').addEventListener('click', e => {
+  const b = e.target.closest('button[data-mode]'); if (!b) return;
+  document.querySelectorAll('#auth-mode button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  authMode = b.dataset.mode;
+  document.getElementById('auth-submit').textContent = authMode === 'login' ? 'Войти' : 'Зарегистрироваться';
+  document.getElementById('auth-error').textContent = '';
 });
-document.getElementById('btn-save-name').addEventListener('click', () => {
-  const val = nameEditInput.value.trim();
-  if (!val) { showToast('Введите имя'); return; }
-  userName = val;
-  saveStoredName(val);
-  renderWhoLine();
-  nameEditRow.style.display = 'none';
-  showToast('Имя сохранено на этом устройстве');
+
+document.getElementById('auth-submit').addEventListener('click', async () => {
+  const errEl = document.getElementById('auth-error');
+  errEl.textContent = '';
+  if (!auth) { errEl.textContent = 'Firebase не настроен'; return; }
+
+  const rawName = document.getElementById('auth-username').value.trim();
+  const pass = document.getElementById('auth-password').value;
+  if (rawName.length < 3) { errEl.textContent = 'Имя пользователя — минимум 3 символа'; return; }
+  if (pass.length < 6) { errEl.textContent = 'Пароль — минимум 6 символов'; return; }
+
+  const email = usernameToEmail(rawName);
+  const submitBtn = document.getElementById('auth-submit');
+  submitBtn.disabled = true;
+  try {
+    if (authMode === 'register') {
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      await updateProfile(cred.user, { displayName: rawName });
+      userName = rawName; // the user object captured by onAuthStateChanged may predate this profile update
+      renderWhoLine();
+    } else {
+      await signInWithEmailAndPassword(auth, email, pass);
+    }
+  } catch (err) {
+    console.error(err);
+    errEl.textContent = describeAuthError(err.code);
+  } finally {
+    submitBtn.disabled = false;
+  }
 });
-if (isFirstVisit && !userName) {
-  nameEditRow.style.display = 'flex';
-  nameEditInput.placeholder = 'Введите ваше имя';
-}
+
+document.getElementById('btn-logout').addEventListener('click', async () => {
+  if (!auth) return;
+  const ok = await confirmAction('Выйти из аккаунта на этом устройстве?');
+  if (!ok) return;
+  await signOut(auth);
+});
 
 /* ---------- Palette for categories ---------- */
 const PALETTE = ['#67e8f9','#a78bfa','#fb7185','#34d399','#fbbf24','#60a5fa','#f472b6','#4ade80','#f97316','#38bdf8'];
@@ -598,19 +709,25 @@ function safeRun(fn, label){
   catch (err) { console.error('[safeRun failed]', label || fn.name, err); }
 }
 
-/* ---------- Firestore refs & listeners ---------- */
-if (db) {
+/* ---------- Firestore refs & listeners (started only once auth is confirmed) ---------- */
+function startFirestoreListeners(db){
   const catDocRef = doc(db, "meta", "categories");
   onSnapshot(catDocRef, snap => {
     if (snap.exists() && Array.isArray(snap.data().list) && snap.data().list.length) {
       categories = snap.data().list;
     } else {
       categories = DEFAULT_CATEGORIES;
-      setDoc(catDocRef, { list: DEFAULT_CATEGORIES }).catch(()=>{});
+      setDoc(catDocRef, { list: DEFAULT_CATEGORIES }).catch(err => {
+        console.error(err);
+        setStatus('error', `❌ Не удалось создать категории (${err.code}). Проверьте правила доступа Firestore для /meta/{doc}.`);
+      });
     }
     safeRun(() => fillCategoryOptions(document.getElementById('f-category')), 'fillCategoryOptions');
     safeRun(renderBudgets, 'renderBudgets');
     safeRun(renderChart, 'renderChart');
+  }, err => {
+    console.error('categories onSnapshot error:', err);
+    setStatus('error', `❌ Ошибка чтения категорий: ${err.code}. Обычно это значит, что правила доступа Firestore не разрешают чтение — проверьте вкладку Rules.`);
   });
 
   onSnapshot(collection(db, "expenses"), snap => {
@@ -620,8 +737,13 @@ if (db) {
     safeRun(renderBudgets, 'renderBudgets');
     safeRun(renderTable, 'renderTable');
     safeRun(renderChart, 'renderChart');
+  }, err => {
+    console.error('expenses onSnapshot error:', err);
+    setStatus('error', `❌ Ошибка чтения трат: ${err.code}. Обычно это значит, что правила доступа Firestore не разрешают чтение — проверьте вкладку Rules.`);
   });
-} else {
+}
+
+if (!db) {
   categories = DEFAULT_CATEGORIES;
   fillCategoryOptions(document.getElementById('f-category'));
   renderBudgets();
@@ -645,10 +767,7 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 1600);
 }
 function confirmAction(message){
-  return new Promise(resolve => {
-    if (tg?.showConfirm) tg.showConfirm(message, ok => resolve(ok));
-    else resolve(window.confirm(message));
-  });
+  return Promise.resolve(window.confirm(message));
 }
 function fillCategoryOptions(selectEl, selectedValue){
   const prev = selectedValue !== undefined ? selectedValue : selectEl.value;
@@ -802,10 +921,10 @@ function drawDonut(sortedCats, total){
     parts += `<g transform="rotate(-90 ${CENTER} ${CENTER})">`;
     sortedCats.forEach(seg => {
       const frac = seg.v / total;
-      const dash = Math.max(frac * CIRC - 1.5, 0); // small gap between slices
+      const dash = frac * CIRC;
       parts += `<circle cx="${CENTER}" cy="${CENTER}" r="${R}" fill="none" stroke="${seg.c}" stroke-width="${STROKE}"
-        stroke-dasharray="${dash} ${CIRC - dash}" stroke-dashoffset="${-acc}" stroke-linecap="round"></circle>`;
-      acc += frac * CIRC;
+        stroke-dasharray="${dash} ${CIRC - dash}" stroke-dashoffset="${-acc}" stroke-linecap="butt"></circle>`;
+      acc += dash;
     });
     parts += `</g>`;
   }
@@ -906,16 +1025,24 @@ document.getElementById('edit-delete').addEventListener('click', async () => {
 });
 
 /* ---------- CSV export: Имя пользователя;Категория;Сумма, chronological order ---------- */
+function csvField(val){
+  const s = String(val ?? '');
+  return `"${s.replace(/"/g, '""')}"`;
+}
 document.getElementById('btn-export').addEventListener('click', () => {
   const month = document.getElementById('table-month').value || currentMonthKey();
   const rows = scopedRows(currentTableScope, month)
     .slice()
     .sort((a,b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  const header = ['Имя пользователя','Категория','Сумма'];
+  const header = ['Имя пользователя','Категория','Сумма'].map(csvField);
   const csvRows = [header.join(';')].concat(
-    rows.map(r => [r.userName || '', r.category, String(r.amount).replace('.',',')].join(';'))
+    rows.map(r => [
+      csvField(r.userName || ''),
+      csvField(r.category || ''),
+      csvField(String(r.amount).replace('.', ','))
+    ].join(';'))
   );
-  const csv = '\uFEFF' + csvRows.join('\n');
+  const csv = '\uFEFF' + csvRows.join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
